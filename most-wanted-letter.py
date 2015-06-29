@@ -1,20 +1,20 @@
 from collections import Counter
 
 
-def checkio(text):    
+def checkio(text):
     alphaText = [elem for elem in text.lower() if str(elem).isalpha()]
     alphaCtr = Counter(alphaText)
-    
+
     maxLetter = None
     maxCount = 0
-    
+
     for letter, count in sorted(alphaCtr.items()):
         if count > maxCount:
             maxLetter = letter
             maxCount = count
-            
+
     return maxLetter
-    
+
 
 if __name__ == '__main__':
     #These "asserts" using only for self-checking and not necessary for auto-testing

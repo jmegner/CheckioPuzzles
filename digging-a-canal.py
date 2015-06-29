@@ -3,31 +3,31 @@ import collections
 
 class Coord(collections.namedtuple('Rc', ['r', 'c'])):
 
-    def naiveNeighbors(self):        
+    def naiveNeighbors(self):
         return [
             Coord(self.r - 1, self.c),
             Coord(self.r,     self.c + 1),
             Coord(self.r + 1, self.c),
             Coord(self.r,     self.c - 1),
             ]
-    
+
 
 class Island:
 
     c_maxDist = 1e99
     c_water = 0
-    c_land = 1    
+    c_land = 1
     c_waterCost = 1
     c_landCost = 100
 
-    def __init__(self, cells):        
+    def __init__(self, cells):
 
         self.numRows = len(cells) + 1
         self.numCols = len(cells[0])
-        
+
         self.cells = [[self.c_water] * self.numCols]
         self.cells.extend(cells)
-        
+
         self.dists = [ [self.c_maxDist] * self.numCols
             for i in range(self.numRows) ]
 
@@ -89,23 +89,23 @@ class Island:
         if self.getCell(coord) == self.c_water:
             return self.c_waterCost
         return self.c_landCost
-        
-        
+
+
     def solve(self):
         openCoords = set()
-        
+
         self.dists[0][0] = 0
-        openCoords.add(Coord(0, 0))        
-        
+        openCoords.add(Coord(0, 0))
+
         while openCoords:
             newlySolvedCoord = self.getMinEstimatedTotalDistCoord(openCoords)
-            
-            if newlySolvedCoord.r == self.numRows - 1:                
-                numCanals = self.getDist(newlySolvedCoord) // self.c_landCost                
+
+            if newlySolvedCoord.r == self.numRows - 1:
+                numCanals = self.getDist(newlySolvedCoord) // self.c_landCost
                 return numCanals
 
             openCoords.remove(newlySolvedCoord)
-            
+
             for neighbor in self.getWalkableNeighbors(newlySolvedCoord):
                 newNeighborDist = (self.getDist(newlySolvedCoord)
                     + self.walkCost(neighbor))
@@ -113,14 +113,14 @@ class Island:
                 if newNeighborDist < self.getDist(neighbor):
                     self.setDist(neighbor, newNeighborDist)
                     openCoords.add(neighbor)
-        
+
         return None
 
 
 def checkio(land_map):
-    isle = Island(land_map)    
+    isle = Island(land_map)
     return isle.solve()
-    
+
 
 #These "asserts" using only for self-checking and not necessary for auto-testing
 if __name__ == '__main__':

@@ -3,12 +3,12 @@ def count_neighbours(grid, row, col):
     begC = max(col - 1, 0)
     endR = min(row + 2, len(grid))
     endC = min(col + 2, len(grid[0]))
-    
+
     sum = 0
     for r in range(begR, endR):
         for c in range(begC, endC):
             sum += grid[r][c]
-            
+
     return sum - grid[row][col]
 
 

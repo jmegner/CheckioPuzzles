@@ -1,10 +1,10 @@
 def checkio(data):
-    data = sorted(data)    
+    data = sorted(data)
     midIdx = len(data) // 2
-    
+
     if len(data) % 2 == 0:
         return (data[midIdx - 1] + data[midIdx]) / 2.0
-    
+
     return data[len(data) // 2]
 
 
