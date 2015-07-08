@@ -2,8 +2,16 @@
 author: Jacob Egner
 date: 2015-07-05
 island: mine
+
+puzzle prompt:
 http://www.checkio.org/mission/supply-stations/
+
+puzzle prompt source repo:
 https://github.com/Bryukh-Checkio-Tasks/checkio-mission-supply-stations
+
+my checkio solution repo:
+https://github.com/jmegner/CheckioPuzzles
+
 '''
 
 
@@ -16,6 +24,9 @@ import functools
 gc_open = '.'
 gc_wall = 'X'
 gc_finish = 'F'
+gc_starts = ['1', '2', '3', '4']
+gc_continues = ['a', 'b', 'c', 'd']
+gc_walkables = [gc_open, gc_finish]
 
 
 class Loc(collections.namedtuple('Loc', ['r', 'c'])):
@@ -29,13 +40,12 @@ class Loc(collections.namedtuple('Loc', ['r', 'c'])):
         return [ self.north(), self.east(), self.south(), self.west(), ]
 
 
-    def principalNeighbors(self):
-        return [Loc(r + delR, c + delC) for delR, delC
-            in itertools.product([-1, 0, 1], repeat=2) if delR or delC]
-
-
     def manhattanDist(self, other):
         return abs(self.r - other.r) + abs(self.c - other.c)
+
+
+    def __sub__(self, other):
+        return Loc(self.r - other.r, self.c - other.c)
 
 
 @functools.total_ordering
@@ -46,140 +56,171 @@ class VeryBig:
     def __radd__(self, other): return self
 
 
-class Edge(collections.namedtuple('Edge', ['srcId', 'dstId', 'cost'])):
-    pass
+class Multimaze:
 
+    def __init__(self, cells):
+        self.cells = [list(row) for row in cells]
 
-@functools.total_ordering
-class Node:
+        self.numRows = len(cells)
+        self.numCols = len(cells[0])
+        self.numStations = len(gc_starts)
 
-    def __init__(self, nodeId, edges, estimatedRemainingDist = 0):
-        self.nodeId = nodeId
-        self.edges = edges
-        self.pathParent = None
-        self.currDist = VeryBig()
-        self.estimatedRemainingDist = estimatedRemainingDist
+        self.finishLoc = self.getLocOfCellType(gc_finish)
+        self.paths = None
+        self.pathStrs = None
 
 
     def __str__(self):
-        return str(self.nodeId)
+        return '\n'.join([''.join(row) for row in self.cells])
 
 
-    def __repr__(self):
-        return "Node(id={},parent={},currDist={},remDist={},edges={})".format(
-            self.nodeId,
-            self.pathParent,
-            self.currDist,
-            self.estimatedRemainingDist,
-            self.edges);
+    def getCell(self, loc):
+        return self.cells[loc.r][loc.c]
 
 
-    def __eq__(self, other):
-        return self.possibleTotalPathLen() == other.possibleTotalPathLen()
+    def setCell(self, loc, value):
+        self.cells[loc.r][loc.c] = value
 
 
-    def __lt__(self, other):
-        return self.possibleTotalPathLen() < other.possibleTotalPathLen()
+    def inBounds(self, loc):
+        return (loc.r >= 0 and loc.c >= 0
+            and loc.r < self.numRows and loc.c < self.numCols)
 
 
-    def possibleTotalPathLen(self):
-        return self.currDist + self.estimatedRemainingDist
+    def isWalkable(self, loc):
+        return self.inBounds(loc) and self.getCell(loc) in gc_walkables
 
 
-    def getNeighborIds(self):
-        return [edge.dstId for edge in self.edges]
+    def getWalkableNeighbors(self, loc):
+        return [neighbor for neighbor in loc.cardinalNeighbors()
+                if self.isWalkable(neighbor)]
 
 
-class AStar:
+    def getNextLocs(self, currLoc):
+        return [nextLoc for nextLoc in currLoc.cardinalNeighbors()
+            if self.isWalkable(nextLoc)
+            and self.getNumNeighborsOfType(nextLoc, self.getCell(currLoc)) <= 1
+            ]
 
-    def __init__(self, nodeMap, startId, finishId = None):
-        '''
-        nodeMap is a dict with nodeId keys and Node values;
-        finishId being None indicates a desire to calculate shortest dist to
-        every node rather than halting once finding a shortest path to a
-        particular finish node
-        '''
-        self.nodeMap = copy.deepcopy(nodeMap)
-        self.startId = startId
-        self.finishId = finishId
-        self.pathToFinish = None
+    def getNumNeighborsOfType(self, loc, cellType):
+        return sum([self.getCell(adjLoc) == cellType
+            for adjLoc in loc.cardinalNeighbors()
+            if self.inBounds(adjLoc)])
 
 
-    @staticmethod
-    def fromGrid(
-        grid,
-        startId, finishId,
-        neighborIdsAndCostsFunc,
-        estimatedRemainingDistFunc
-    ):
-        nodeMap = {}
-        visitedNodeIds = set()
-        nodeIdStack = [startId]
+    def getLocOfCellType(self, cellType):
+        for r in range(self.numRows):
+            for c in range(self.numCols):
+                if self.cells[r][c] == cellType:
+                    return Loc(r, c)
+        return None
 
-        while nodeIdStack:
-            nodeId = nodeIdStack.pop()
-            estimatedRemainingDist = estimatedRemainingDistFunc(nodeId)
-            edges = [Edge(nodeId, neighborId, cost)
-                for neighborId, cost in neighborIdsAndCostsFunc(nodeId)]
 
-            nodeMap[nodeId] = Node(nodeId, edges, estimatedRemainingDist)
-
-            visitedNodeIds.add(nodeId)
-
-            for edge in edges:
-                if edge.dstId not in visitedNodeIds:
-                    nodeIdStack.append(edge.dstId)
-
-        return AStar(nodeMap, startId, finishId)
+    def getSortedByFinishProximity(self, locs):
+        return sorted(locs, key = lambda loc: loc.manhattanDist(self.finishLoc))
 
 
     def solve(self):
-        self._explore()
-        self._markPath()
+        self.paths = [[self.getLocOfCellType(startChar)]
+            for startChar in gc_starts]
+
+        self.pathStrs = []
+
+        success = self.depthFirstSearch(0)
+
+        if success:
+            delLocToDir = {
+                Loc(-1, 0) : 'N',
+                Loc(+1, 0) : 'S',
+                Loc(0, -1) : 'W',
+                Loc(0, +1) : 'E',
+                }
+
+            for path in self.paths:
+                pathDirs = []
+
+                for currLoc, prevLoc in zip(path[1:], path[:-1]):
+                    delLoc = currLoc - prevLoc
+                    pathDirs.append(delLocToDir[delLoc])
+
+                self.pathStrs.append(''.join(pathDirs))
 
 
-    def _explore(self):
-        openNodeIds = set()
-
-        self.nodeMap[self.startId].currDist = 0
-        openNodeIds.add(self.startId)
-
-        while openNodeIds:
-            newlySolvedNode = min(map(
-                lambda nodeId: self.nodeMap[nodeId],
-                openNodeIds))
-
-            if newlySolvedNode.nodeId == self.finishId:
-                break
-
-            openNodeIds.remove(newlySolvedNode.nodeId)
-
-            for edge in newlySolvedNode.edges:
-                newDist = newlySolvedNode.currDist + edge.cost
-                neighbor = self.nodeMap[edge.dstId]
-
-                if newDist < neighbor.currDist:
-                    neighbor.currDist = newDist
-                    neighbor.pathParent = newlySolvedNode
-                    openNodeIds.add(neighbor.nodeId)
+    def isSolved(self):
+        return all(map(lambda path: path[-1] == self.finishLoc), self.paths)
 
 
-    def _markPath(self):
-        if self.finishId is None:
-            return
+    def pathReachesFinish(self, path):
+        return path[-1] == self.finishLoc
 
-        currNode = self.nodeMap[self.finishId]
-        reversePath = []
 
-        while currNode is not None:
-            reversePath.append(currNode)
-            currNode = currNode.pathParent
+    def depthFirstSearch(self, pathIdx):
+        if pathIdx >= len(self.paths):
+            return True
 
-        self.pathToFinish = list(reversed(reversePath))
+        if not self.allStationsCanReachFinish():
+            return False
+
+        path = self.paths[pathIdx]
+        nextLocs = self.getNextLocs(path[-1])
+
+        if self.finishLoc in nextLocs:
+            path.append(self.finishLoc)
+            laterSuccess = self.depthFirstSearch(pathIdx + 1)
+
+            if laterSuccess:
+                return True
+
+            path.pop()
+
+        else:
+            for nextLoc in self.getSortedByFinishProximity(nextLocs):
+                path.append(nextLoc)
+                self.setCell(nextLoc, gc_continues[pathIdx])
+
+                laterSuccess = self.depthFirstSearch(pathIdx)
+
+                if laterSuccess:
+                    return True
+
+                path.pop()
+                self.setCell(nextLoc, gc_open)
+
+        return False
+
+
+    def allStationsCanReachFinish(self):
+        for path in self.paths:
+            if not self.pathExistsToFinish(path[-1]):
+                return False
+
+        return True
+
+
+    def pathExistsToFinish(self, startLoc):
+        if startLoc == self.finishLoc:
+            return True
+
+        locStack = [startLoc]
+        visitedLocs = set()
+
+        while locStack:
+            currLoc = locStack.pop()
+            visitedLocs.add(currLoc)
+
+            for adjLoc in self.getWalkableNeighbors(currLoc):
+                if adjLoc not in visitedLocs:
+                    if adjLoc == self.finishLoc:
+                        return True
+                    locStack.append(adjLoc)
+
+        return False
 
 
 def supply_routes(grid):
-    return "", "", "", ""
+    maze = Multimaze(grid)
+    maze.solve()
+    return maze.pathStrs
 
 
 if __name__ == '__main__':
@@ -240,8 +281,9 @@ if __name__ == '__main__':
         ".X..X.....",
         ".X..X.....",
         "..3.X...4.",
-        "....X....."))
-    print(test1[1])
+        "....X.....",
+        ))
+    print(test1[1], "\n")
     assert test1[0], "First test"
 
     test2 = checker(supply_routes, (
@@ -249,8 +291,9 @@ if __name__ == '__main__':
         ".....",
         "..F..",
         ".....",
-        "3...4"))
-    print(test2[1])
+        "3...4",
+        ))
+    print(test2[1], "\n")
     assert test2[0], "Second test"
 
     test3 = checker(supply_routes, (
@@ -258,8 +301,76 @@ if __name__ == '__main__':
         ".....",
         "1.F.3",
         ".....",
-        "..4.."))
-    print(test3[1])
-    assert test3[0], "Third test"
+        "..4..",
+        ))
+    print(test3[1], "\n")
+    assert test3[0], "test3"
+
+    test4 = checker(supply_routes, (
+        ".....",
+        "...X.",
+        "3F..1",
+        ".4.2.",
+        ".....",
+        ))
+    print(test4[1], "\n")
+    assert test4[0], "test4"
+
+    test5 = checker(supply_routes, (
+        ".....4...",
+        "....3F...",
+        ".........",
+        "XXXXXXX..",
+        "X.....X..",
+        "1........",
+        "2..X.....",
+        ))
+    print(test5[1], "\n")
+    assert test5[0], "test5"
+
+    test6 = checker(supply_routes, (
+        "..........",
+        ".F..XXXXX.",
+        "..........",
+        ".X........",
+        ".X........",
+        ".X........",
+        ".X........",
+        ".X......4.",
+        ".X.....3X2",
+        "........1.",
+        ))
+    print(test6[1], "\n")
+    assert test6[0], "test6"
+
+    test7 = checker(supply_routes, (
+        "..........",
+        "1.......X.",
+        "........X.",
+        "........X.",
+        "........X.",
+        "........X.",
+        "34.2....X.",
+        "X.........",
+        "...X...F.X",
+        "....X.....",
+        ))
+    print(test7[1], "\n")
+    assert test7[0], "test7"
+
+    test8 = checker(supply_routes, (
+        ".....XX..2",
+        ".........3",
+        "..X......X",
+        "..XXXXXXXX",
+        "..........",
+        "..........",
+        "XXXXXXX...",
+        "1.......F4",
+        "X.XXXXXX..",
+        "..........",
+        ))
+    print(test8[1], "\n")
+    assert test8[0], "test8"
 
 
