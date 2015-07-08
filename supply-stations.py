@@ -12,6 +12,11 @@ https://github.com/Bryukh-Checkio-Tasks/checkio-mission-supply-stations
 my checkio solution repo:
 https://github.com/jmegner/CheckioPuzzles
 
+this strategy is a depth-first-search with some early pruning tricks:
+1: do not block anyone from the finish;
+2: no need for a path to "bunch up" on itself or create culdesacs;
+3: first search towards the finish;
+
 '''
 
 
@@ -31,29 +36,34 @@ gc_walkables = [gc_open, gc_finish]
 
 class Loc(collections.namedtuple('Loc', ['r', 'c'])):
 
-    def north(self): return Loc(self.r - 1, self.c)
-    def south(self): return Loc(self.r + 1, self.c)
-    def west(self): return Loc(self.r, self.c - 1)
-    def east(self): return Loc(self.r, self.c + 1)
-
     def cardinalNeighbors(self):
-        return [ self.north(), self.east(), self.south(), self.west(), ]
+        return [self + cardinalDel for cardinalDel in self.s_cardinalDels]
 
 
     def manhattanDist(self, other):
         return abs(self.r - other.r) + abs(self.c - other.c)
 
 
+    def __add__(self, other):
+        return Loc(self.r + other.r, self.c + other.c)
+
+
     def __sub__(self, other):
         return Loc(self.r - other.r, self.c - other.c)
 
 
-@functools.total_ordering
-class VeryBig:
-    def __eq__(self, other): return isinstance(other, VeryBig)
-    def __lt__(self, other): return False
-    def __add__(self, other): return self
-    def __radd__(self, other): return self
+    def __mul__(self, scaler):
+        return Loc(self.r * scaler, self.c * scaler)
+
+    __rmul__ = __mul__
+
+
+Loc.s_cardinalDels = collections.OrderedDict([
+    (Loc(-1, +0), 'N'),
+    (Loc(+0, +1), 'E'),
+    (Loc(+1, +0), 'S'),
+    (Loc(+0, -1), 'W'),
+])
 
 
 class Multimaze:
@@ -100,7 +110,8 @@ class Multimaze:
         return [nextLoc for nextLoc in currLoc.cardinalNeighbors()
             if self.isWalkable(nextLoc)
             and self.getNumNeighborsOfType(nextLoc, self.getCell(currLoc)) <= 1
-            ]
+            and not self.locPartOfCuldesac(nextLoc, self.getCell(currLoc))
+        ]
 
     def getNumNeighborsOfType(self, loc, cellType):
         return sum([self.getCell(adjLoc) == cellType
@@ -120,6 +131,30 @@ class Multimaze:
         return sorted(locs, key = lambda loc: loc.manhattanDist(self.finishLoc))
 
 
+    def locPartOfCuldesac(self, loc, cellType):
+        for delLoc in Loc.s_cardinalDels:
+            loc1 = loc + delLoc
+
+            if self.inBounds(loc1) and self.getCell(loc1) == gc_open:
+                loc2 = loc + delLoc * 2
+
+                if self.inBounds(loc2):
+                    cell2 = self.getCell(loc2)
+
+                    # if culdesac with 1 open spot
+                    if cell2 == cellType:
+                        return True
+
+                    # maybe culdesac with 2 open spots
+                    elif cell2 == gc_open:
+                        loc3 = loc + delLoc * 3
+
+                        if self.inBounds(loc3) and self.getCell(loc3) == cellType:
+                            return True
+
+        return False
+
+
     def solve(self):
         self.paths = [[self.getLocOfCellType(startChar)]
             for startChar in gc_starts]
@@ -129,19 +164,12 @@ class Multimaze:
         success = self.depthFirstSearch(0)
 
         if success:
-            delLocToDir = {
-                Loc(-1, 0) : 'N',
-                Loc(+1, 0) : 'S',
-                Loc(0, -1) : 'W',
-                Loc(0, +1) : 'E',
-                }
-
             for path in self.paths:
                 pathDirs = []
 
                 for currLoc, prevLoc in zip(path[1:], path[:-1]):
                     delLoc = currLoc - prevLoc
-                    pathDirs.append(delLocToDir[delLoc])
+                    pathDirs.append(Loc.s_cardinalDels[delLoc])
 
                 self.pathStrs.append(''.join(pathDirs))
 
@@ -271,106 +299,88 @@ if __name__ == '__main__':
             return False, "You should deliver all four resources"
         return True, "Great!"
 
-    test1 = checker(supply_routes, (
-        "..........",
-        ".1X.......",
-        ".2X.X.....",
-        ".XXX......",
-        ".X..F.....",
-        ".X........",
-        ".X..X.....",
-        ".X..X.....",
-        "..3.X...4.",
-        "....X.....",
-        ))
-    print(test1[1], "\n")
-    assert test1[0], "First test"
+    testGrids = [
+        (
+            "..........",
+            ".1X.......",
+            ".2X.X.....",
+            ".XXX......",
+            ".X..F.....",
+            ".X........",
+            ".X..X.....",
+            ".X..X.....",
+            "..3.X...4.",
+            "....X.....",
+        ), (
+            "1...2",
+            ".....",
+            "..F..",
+            ".....",
+            "3...4",
+        ), (
+            "..2..",
+            ".....",
+            "1.F.3",
+            ".....",
+            "..4..",
+        ), (
+            "..2..",
+            ".....",
+            "1.F.3",
+            ".....",
+            "..4..",
+        ), (
+            ".....",
+            "...X.",
+            "3F..1",
+            ".4.2.",
+            ".....",
+        ), (
+            ".....4...",
+            "....3F...",
+            ".........",
+            "XXXXXXX..",
+            "X.....X..",
+            "1........",
+            "2..X.....",
+        ), (
+            "..........",
+            ".F..XXXXX.",
+            "..........",
+            ".X........",
+            ".X........",
+            ".X........",
+            ".X........",
+            ".X......4.",
+            ".X.....3X2",
+            "........1.",
+        ), (
+            "..........",
+            "1.......X.",
+            "........X.",
+            "........X.",
+            "........X.",
+            "........X.",
+            "34.2....X.",
+            "X.........",
+            "...X...F.X",
+            "....X.....",
+        ), (
+            ".....XX..2",
+            ".........3",
+            "..X......X",
+            "..XXXXXXXX",
+            "..........",
+            "..........",
+            "XXXXXXX...",
+            "1.......F4",
+            "X.XXXXXX..",
+            "..........",
+        )]
 
-    test2 = checker(supply_routes, (
-        "1...2",
-        ".....",
-        "..F..",
-        ".....",
-        "3...4",
-        ))
-    print(test2[1], "\n")
-    assert test2[0], "Second test"
-
-    test3 = checker(supply_routes, (
-        "..2..",
-        ".....",
-        "1.F.3",
-        ".....",
-        "..4..",
-        ))
-    print(test3[1], "\n")
-    assert test3[0], "test3"
-
-    test4 = checker(supply_routes, (
-        ".....",
-        "...X.",
-        "3F..1",
-        ".4.2.",
-        ".....",
-        ))
-    print(test4[1], "\n")
-    assert test4[0], "test4"
-
-    test5 = checker(supply_routes, (
-        ".....4...",
-        "....3F...",
-        ".........",
-        "XXXXXXX..",
-        "X.....X..",
-        "1........",
-        "2..X.....",
-        ))
-    print(test5[1], "\n")
-    assert test5[0], "test5"
-
-    test6 = checker(supply_routes, (
-        "..........",
-        ".F..XXXXX.",
-        "..........",
-        ".X........",
-        ".X........",
-        ".X........",
-        ".X........",
-        ".X......4.",
-        ".X.....3X2",
-        "........1.",
-        ))
-    print(test6[1], "\n")
-    assert test6[0], "test6"
-
-    test7 = checker(supply_routes, (
-        "..........",
-        "1.......X.",
-        "........X.",
-        "........X.",
-        "........X.",
-        "........X.",
-        "34.2....X.",
-        "X.........",
-        "...X...F.X",
-        "....X.....",
-        ))
-    print(test7[1], "\n")
-    assert test7[0], "test7"
-
-    test8 = checker(supply_routes, (
-        ".....XX..2",
-        ".........3",
-        "..X......X",
-        "..XXXXXXXX",
-        "..........",
-        "..........",
-        "XXXXXXX...",
-        "1.......F4",
-        "X.XXXXXX..",
-        "..........",
-        ))
-    print(test8[1], "\n")
-    assert test8[0], "test8"
+    for testIdx, testGrid in enumerate(testGrids):
+        testResult, testMsg = checker(supply_routes, testGrid)
+        print(testMsg, "\n")
+        assert testResult, "test" + str(testIdx)
 
 
