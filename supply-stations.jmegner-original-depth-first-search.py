@@ -12,7 +12,10 @@ https://github.com/Bryukh-Checkio-Tasks/checkio-mission-supply-stations
 my checkio solution repo:
 https://github.com/jmegner/CheckioPuzzles
 
-overview: Suurballe's algorithm
+this strategy is a depth-first-search with some early pruning tricks:
+1: do not block anyone from the finish;
+2: no need for a path to "bunch up" on itself or create culdesacs;
+3: first search towards the finish;
 
 '''
 
@@ -23,108 +26,12 @@ import itertools
 import functools
 
 
-class CellType:
-    openSpace = '.'
-    wall = 'X'
-    finish = 'F'
-    starts = ['1', '2', '3', '4']
-    continues = ['a', 'b', 'c', 'd']
-    walkables = [CellType.openSpace, CellType.finish]
-
-
-@functools.total_ordering
-class VeryBig:
-    def __eq__(self, other): return isinstance(other, VeryBig)
-    def __lt__(self, other): return False
-    def __add__(self, other): return self
-    __radd__ = __add__
-    __sub__  = __add__
-    __rsub__ = __add__
-
-
-class Edge(collections.namedtuple('Edge', ['srcId', 'dstId', 'cost'])):
-    pass
-
-
-@functools.total_ordering
-class Node:
-
-    def __init__(self, nodeId, edges, estimatedRemainingDist = 0):
-        self.nodeId = nodeId
-        self.edges = edges
-        self.pathParent = None
-        self.currDist = VeryBig()
-        self.estimatedRemainingDist = estimatedRemainingDist
-
-
-    def __str__(self):
-        return str(self.nodeId)
-
-
-    def __repr__(self):
-        return "Node(id={},parent={},currDist={},remDist={},edges={})".format(
-            self.nodeId,
-            self.pathParent,
-            self.currDist,
-            self.estimatedRemainingDist,
-            self.edges);
-
-
-    def __eq__(self, other):
-        return self.possibleTotalPathLen() == other.possibleTotalPathLen()
-
-
-    def __lt__(self, other):
-        return self.possibleTotalPathLen() < other.possibleTotalPathLen()
-
-
-    def possibleTotalPathLen(self):
-        return self.currDist + self.estimatedRemainingDist
-
-
-    def getNeighborIds(self):
-        return [edge.dstId for edge in self.edges]
-
-
-class StationGraph:
-
-    def __init__(self, nodeMap, startId, finishId = None):
-        '''
-        nodeMap is a dict with nodeId keys and Node values;
-        finishId being None indicates a desire to calculate shortest dist to
-        every node rather than halting once finding a shortest path to a
-        particular finish node
-        '''
-        self.nodeMap = copy.deepcopy(nodeMap)
-        self.startId = startId
-        self.finishId = finishId
-        self.pathToFinish = None
-
-
-    def findShortestPathToFinish(self):
-        openNodeIds = set()
-
-        self.nodeMap[self.startId].currDist = 0
-        openNodeIds.add(self.startId)
-
-        while openNodeIds:
-            newlySolvedNode = min(map(
-                lambda nodeId: self.nodeMap[nodeId],
-                openNodeIds))
-
-            if newlySolvedNode.nodeId == self.finishId:
-                break
-
-            openNodeIds.remove(newlySolvedNode.nodeId)
-
-            for edge in newlySolvedNode.edges:
-                newDist = newlySolvedNode.currDist + edge.cost
-                neighbor = self.nodeMap[edge.dstId]
-
-                if newDist < neighbor.currDist:
-                    neighbor.currDist = newDist
-                    neighbor.pathParent = newlySolvedNode
-                    openNodeIds.add(neighbor.nodeId)
+gc_open = '.'
+gc_wall = 'X'
+gc_finish = 'F'
+gc_starts = ['1', '2', '3', '4']
+gc_continues = ['a', 'b', 'c', 'd']
+gc_walkables = [gc_open, gc_finish]
 
 
 class Loc(collections.namedtuple('Loc', ['r', 'c'])):
@@ -159,25 +66,16 @@ Loc.s_cardinalDels = collections.OrderedDict([
 ])
 
 
-class NodeType:
-    inbound = 0
-    outbound = 1
-
-
-class DoubleNodeId(collections.namedtuple('DoubleNodeId', ['loc', 'nodeType'])):
-    pass
-
-
-class StationGrid:
+class Multimaze:
 
     def __init__(self, cells):
         self.cells = [list(row) for row in cells]
 
         self.numRows = len(cells)
         self.numCols = len(cells[0])
-        self.numStations = len(CellType.starts)
+        self.numStations = len(gc_starts)
 
-        self.finishLoc = self.getLocOfCellType(CellType.finish)
+        self.finishLoc = self.getLocOfCellType(gc_finish)
         self.paths = None
         self.pathStrs = None
 
@@ -200,7 +98,7 @@ class StationGrid:
 
 
     def isWalkable(self, loc):
-        return self.inBounds(loc) and self.getCell(loc) in CellType.walkables
+        return self.inBounds(loc) and self.getCell(loc) in gc_walkables
 
 
     def getWalkableNeighbors(self, loc):
@@ -210,7 +108,16 @@ class StationGrid:
 
     def getNextLocs(self, currLoc):
         return [nextLoc for nextLoc in currLoc.cardinalNeighbors()
-            if self.isWalkable(nextLoc)]
+            if self.isWalkable(nextLoc)
+            and self.getNumNeighborsOfType(nextLoc, self.getCell(currLoc)) <= 1
+            and not self.locPartOfCuldesac(nextLoc, self.getCell(currLoc))
+        ]
+
+    def getNumNeighborsOfType(self, loc, cellType):
+        return sum([self.getCell(adjLoc) == cellType
+            for adjLoc in loc.cardinalNeighbors()
+            if self.inBounds(adjLoc)])
+
 
     def getLocOfCellType(self, cellType):
         for r in range(self.numRows):
@@ -224,63 +131,33 @@ class StationGrid:
         return sorted(locs, key = lambda loc: loc.manhattanDist(self.finishLoc))
 
 
-    def estimatedRemainingDist(self, loc):
-        return loc.manhattanDist(self.finishLoc)
+    def locPartOfCuldesac(self, loc, cellType):
+        for delLoc in Loc.s_cardinalDels:
+            loc1 = loc + delLoc
 
+            if self.inBounds(loc1) and self.getCell(loc1) == gc_open:
+                loc2 = loc + delLoc * 2
 
-    def makeDoubleNodeGraph(self):
-        stationLocs = [self.getLocOfCellType(startChar)
-            for startChar in CellType.starts]
+                if self.inBounds(loc2):
+                    cell2 = self.getCell(loc2)
 
-        fakeStartId = Loc(VeryBig(), VeryBig())
-        fakeStartNode = Node(
-            fakeStartId,
-            [Edge(
-                fakeStartId,
-                DoubleNodeId(stationLoc, NodeType.inbound),
-                0)
-                for stationLoc in stationLocs])
+                    # if culdesac with 1 open spot
+                    if cell2 == cellType:
+                        return True
 
-        nodeMap = {fakeStartId: fakeStartNode}
-        visitedLocs = set()
-        locStack = list(stationLocs)
+                    # maybe culdesac with 2 open spots
+                    elif cell2 == gc_open:
+                        loc3 = loc + delLoc * 3
 
-        while locStack:
-            currLoc = locStack.pop()
-            estRemDist = estimatedRemainingDistFunc(currLoc)
-            currInNodeId = DoubleNodeId(currLoc, NodeType.inbound)
-            currOutNodeId = DoubleNodeId(currLoc, NodeType.outbound)
+                        if self.inBounds(loc3) and self.getCell(loc3) == cellType:
+                            return True
 
-            transferEdge = Edge(currInNodeId, currOutNodeId, 0)
-            outEdges = [
-                Edge(
-                    currOutNodeId,
-                    DoubleNodeId(neighborLoc, NodeType.inbound),
-                    1)
-                for neighborLoc in self.getWalkableNeighbors(currLoc)
-            ]
-
-            nodeMap[currInNodeId] = Node(currInNodeId, transferEdge, estRemDist)
-            nodeMap[currOutNodeId] = Node(currOutNodeId, outEdges, estRemDist)
-
-            visitedLocs.add(currLoc)
-
-            for edge in outEdges:
-                if edge.dstId not in visitedLocs:
-                    locStack.append(edge.dstId.loc)
-
-        self.stationGraph = StationGraph(
-            nodeMap,
-            fakeStartId,
-            DoubleNodeId(self.finishLoc, NodeType.inbound))
+        return False
 
 
     def solve(self):
-        for stationIdx in range(len(CellType.starts)):
-            self.stationGraph.findShortestPathToFinish()
-
         self.paths = [[self.getLocOfCellType(startChar)]
-            for startChar in CellType.starts]
+            for startChar in gc_starts]
 
         self.pathStrs = []
 
@@ -305,10 +182,73 @@ class StationGrid:
         return path[-1] == self.finishLoc
 
 
+    def depthFirstSearch(self, pathIdx):
+        if pathIdx >= len(self.paths):
+            return True
+
+        if not self.allStationsCanReachFinish():
+            return False
+
+        path = self.paths[pathIdx]
+        nextLocs = self.getNextLocs(path[-1])
+
+        if self.finishLoc in nextLocs:
+            path.append(self.finishLoc)
+            laterSuccess = self.depthFirstSearch(pathIdx + 1)
+
+            if laterSuccess:
+                return True
+
+            path.pop()
+
+        else:
+            for nextLoc in self.getSortedByFinishProximity(nextLocs):
+                path.append(nextLoc)
+                self.setCell(nextLoc, gc_continues[pathIdx])
+
+                laterSuccess = self.depthFirstSearch(pathIdx)
+
+                if laterSuccess:
+                    return True
+
+                path.pop()
+                self.setCell(nextLoc, gc_open)
+
+        return False
+
+
+    def allStationsCanReachFinish(self):
+        for path in self.paths:
+            if not self.pathExistsToFinish(path[-1]):
+                return False
+
+        return True
+
+
+    def pathExistsToFinish(self, startLoc):
+        if startLoc == self.finishLoc:
+            return True
+
+        locStack = [startLoc]
+        visitedLocs = set()
+
+        while locStack:
+            currLoc = locStack.pop()
+            visitedLocs.add(currLoc)
+
+            for adjLoc in self.getWalkableNeighbors(currLoc):
+                if adjLoc not in visitedLocs:
+                    if adjLoc == self.finishLoc:
+                        return True
+                    locStack.append(adjLoc)
+
+        return False
+
+
 def supply_routes(grid):
-    stationGrid = StationGrid(grid)
-    stationGrid.solve()
-    return stationGrid.pathStrs
+    maze = Multimaze(grid)
+    maze.solve()
+    return maze.pathStrs
 
 
 if __name__ == '__main__':

@@ -1,3 +1,23 @@
+'''
+author: Jacob Egner
+date: 2015-06-25, or maybe a few days earlier
+island: scientific expedition
+
+puzzle prompt:
+http://www.checkio.org/mission/calculate-islands/
+
+puzzle prompt source repo:
+https://github.com/Bryukh-Checkio-Tasks/checkio-task-calculate-islands
+
+my checkio solution repo:
+https://github.com/jmegner/CheckioPuzzles
+
+this puzzle is very similar to the radiation-search puzzle from electronic
+station island
+
+'''
+
+
 import itertools
 
 
@@ -45,3 +65,4 @@ if __name__ == '__main__':
                     [0, 0, 0, 0, 0, 0],
                     [0, 1, 1, 1, 1, 0],
                     [0, 0, 0, 0, 0, 0]]) == [2, 3, 3, 4], "3rd example"
+
