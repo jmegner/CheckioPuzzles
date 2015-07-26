@@ -37,7 +37,7 @@ class Point(collections.namedtuple('Point', ['x', 'y'])):
 
 
 def checkio(triplePointStr):
-    pointStrs = triplePointStr.strip('(').rstrip(')').split('),(')
+    pointStrs = triplePointStr.strip('()').split('),(')
     points = [Point(*map(float, pointStr.split(','))) for pointStr in pointStrs]
 
     ka = []
