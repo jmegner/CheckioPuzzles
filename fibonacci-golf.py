@@ -1,6 +1,6 @@
-a,b,m=[0,1,1],[1,1,0],[0,1,2]
-d={'ib':a+b,'ri':a+[1]*3,'uc':[2,1,3]+b,'ac':a+[1,2,0],'el':m+[2,1,0],'er':[3,0,2]+a,'ad':a+a}
-def f(x,c,k):
- if x not in c:c[x]=sum(k[i+3]*f(x-i-1,c,k)for i in m)
- return c[x]
-def fibgolf(s,x):return f(x,dict(enumerate(d[s[1:3]][:3])),d[s[1:3]])
+def fibgolf(s, n):
+    a, b, c = [2, 1, 1] if 'u' in s else [3, 0, 2] if s == 'perrin' else [0, 1, 1]
+    while n > 0:
+        [a, b, c] = [b, c, a+b+c] if 'tr' in s else [b, c, a + b] if s[-1] == 'n' else [b, (2 if 'j' in s else 1) * a + (2 if s == 'pell' else 1) * b, c]
+        n -= 1
+    return a
