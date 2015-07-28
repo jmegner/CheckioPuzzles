@@ -1,3 +1,14 @@
+'''
+author: Jacob Egner
+date: 2015-06-29 or somewhat before
+island: home
+
+for latest versions of my solutions, see my checkio solution github repo:
+https://github.com/jmegner/CheckioPuzzles
+
+'''
+
+
 from collections import Counter
 
 
@@ -5,19 +16,15 @@ def checkio(text):
     alphaText = [elem for elem in text.lower() if str(elem).isalpha()]
     alphaCtr = Counter(alphaText)
 
-    maxLetter = None
-    maxCount = 0
+    orderedLettersAndCounts = sorted(
+        alphaCtr.items(),
+        key=lambda pair: (-pair[1], pair[0])
+    )
 
-    for letter, count in sorted(alphaCtr.items()):
-        if count > maxCount:
-            maxLetter = letter
-            maxCount = count
-
-    return maxLetter
+    return orderedLettersAndCounts[0][0]
 
 
 if __name__ == '__main__':
-    #These "asserts" using only for self-checking and not necessary for auto-testing
     assert checkio("Hello World!") == "l", "Hello test"
     assert checkio("How do you do?") == "o", "O is most wanted"
     assert checkio("One") == "e", "All letter only once."
@@ -27,3 +34,5 @@ if __name__ == '__main__':
     print("Start the long test")
     assert checkio("a" * 9000 + "b" * 1000) == "a", "Long."
     print("The local tests are done.")
+
+
