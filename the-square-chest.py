@@ -38,8 +38,7 @@ def checkio(segments):
 
 def addSegment(horizSegs, vertSegs, segment):
     segment = sorted(segment)
-    r = (segment[0] - 1) // g_gridLen
-    c = (segment[0] - 1) % g_gridLen
+    r, c = divmod(segment[0] - 1, g_gridLen)
 
     if segment[1] - segment[0] == 1:
         horizSegs.add((r, c))
