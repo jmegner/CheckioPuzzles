@@ -11,7 +11,6 @@ for latest versions of my solutions, see my checkio solution github repo:
 https://github.com/jmegner/CheckioPuzzles
 
 overview: recursive depth-first-search
-
 '''
 
 
@@ -25,11 +24,11 @@ def checkio(edgesStr):
         nodeToAdj[edgeStr[0]].add(edgeStr[1])
         nodeToAdj[edgeStr[1]].add(edgeStr[0])
 
-    cycle = findExhaustiveCycle(nodeToAdj)
-    return  cycle
+    cycle = findExhaustiveCycle(nodeToAdj, '1')
+    return cycle
 
 
-def findExhaustiveCycle(nodeToAdj, pathStr = '1'):
+def findExhaustiveCycle(nodeToAdj, pathStr):
     currNode = pathStr[-1]
 
     if len(set(pathStr)) == len(nodeToAdj) and currNode == '1':
