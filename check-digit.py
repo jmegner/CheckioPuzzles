@@ -24,7 +24,7 @@ def checkio(rawStr):
 
         charSum += charVal
 
-    return [str(10 - charSum % 10)[-1], charSum]
+    return [str(-charSum % 10), charSum]
 
 
 if __name__ == '__main__':
