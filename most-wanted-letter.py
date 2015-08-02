@@ -5,20 +5,19 @@ island: home
 
 for latest versions of my solutions, see my checkio solution github repo:
 https://github.com/jmegner/CheckioPuzzles
-
 '''
 
 
-from collections import Counter
+import collections
 
 
 def checkio(text):
-    alphaText = [elem for elem in text.lower() if str(elem).isalpha()]
-    alphaCtr = Counter(alphaText)
+    alphaText = [elem for elem in text.lower() if elem.isalpha()]
+    alphaCtr = collections.Counter(alphaText)
 
     orderedLettersAndCounts = sorted(
         alphaCtr.items(),
-        key=lambda pair: (-pair[1], pair[0])
+        key = lambda pair: (-pair[1], pair[0])
     )
 
     return orderedLettersAndCounts[0][0]
