@@ -5,6 +5,17 @@ island: home
 
 for latest versions of my solutions, see my checkio solution github repo:
 https://github.com/jmegner/CheckioPuzzles
+
+alternatively, you can solve the puzzle like this:
+
+    import string
+
+    def checkio(text):
+        text = text.lower()
+        return max(string.ascii_lowercase, key=text.count)
+
+but that scans the original text 26 times, rather than once, and is less
+inspectable, so I'm okay with not switching my official solution;
 '''
 
 
@@ -15,12 +26,12 @@ def checkio(text):
     alphaText = [elem for elem in text.lower() if elem.isalpha()]
     alphaCtr = collections.Counter(alphaText)
 
-    orderedLettersAndCounts = sorted(
+    mostCommonLetterAndCount = min(
         alphaCtr.items(),
         key = lambda pair: (-pair[1], pair[0])
     )
 
-    return orderedLettersAndCounts[0][0]
+    return mostCommonLetterAndCount[0]
 
 
 if __name__ == '__main__':
