@@ -9,6 +9,9 @@ https://github.com/Bryukh-Checkio-Tasks/checkio-mission-gather-power
 
 for latest versions of my solutions, see my checkio solution github repo:
 https://github.com/jmegner/CheckioPuzzles
+
+These are some various versions I had trying to optimize my score for this
+golf style puzzle.
 '''
 
 
@@ -21,6 +24,41 @@ def golf(g,t,r=0,v=[]):
         if(c not in v)*d*(t-d+1)>0:
             e+=golf(g,t-d,c,v+[c])
     return e
+
+
+# flavor E, commented and renamed version
+# strategy is to do depth-first recursive search outward and see
+# what rooms we can reach within the time limit; function returns how many
+# people can be evacuated within time limit
+def golf(roomGrid, timeRemaining, currRoomIdx=0, visitedRooms=[]):
+    roomInfo = roomGrid[currRoomIdx]
+
+    # if we get here within time, that means people in this room can evacuate
+    # in time
+    numEvacuated = roomInfo[currRoomIdx]
+
+    # do not want to double-count rooms when we re-visit in different recursion
+    # branch with more time remaining, so we "evacuate" the people now
+    roomInfo[currRoomIdx] = 0
+
+    # look at all possible next rooms to go to
+    for nextRoomIdx, timeCost in enumerate(gridRow):
+        # go to next room if...
+        # 1: have not visited room in this recursion branch
+        # 2: next room is connected (signalled by nonzero timeCost)
+        # 3: will have non-negative time remaining once in room
+        # funky math was done to reduce character count
+        if(
+            (nextRoomIdx not in visitedRooms)
+            * timeCost
+            * (timeRemaining - timeCost + 1)
+            > 0
+        ):
+            # fold in evacuated people further down the recursion
+            numEvacuated += golf(roomGrid, timeRemaining - timeCost, nextRoomIdx, visitedRooms + [nextRoomIdx])
+
+    return numEvacuated
+
 
 # 125 points, flavor F
 def golf(g,t,r=0,v=[]):
@@ -84,6 +122,8 @@ def golf(g,t,r=0):
             h[c]=g[c][r]=d
     return e
 
+
+# thought I'd see if Floyd-Warshall promising (answer: not really)
 def golf(g,t):
     g=[[v+9e9*(v==0)for v in r]for r in g]
     n=list(range(len(g)))
