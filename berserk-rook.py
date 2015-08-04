@@ -26,6 +26,7 @@ class Loc(collections.namedtuple('Loc', ['r', 'c'])):
         return Loc(self.r * scale, self.c * scale)
 
 
+    @staticmethod
     def fromChessStr(chessStr):
         return Loc(ord(chessStr[1]) - ord('1'), ord(chessStr[0]) - ord('a'))
 
