@@ -16,6 +16,8 @@ note: re-uses some code from texas-referee puzzle from electronic station
 
 import collections
 import functools
+import itertools
+import random
 
 
 g_highCards = "high cards"
@@ -40,40 +42,201 @@ g_handTypeToScore = {
     g_fiveOfAKind   : 200,
 }
 
-
-def poker_dice(rolls, scores):
-    hand, handType = getBestHandAndType(rolls[-1])
-
-    if handType == g_highCards:
-        return []
-    if handType != g_highCards:
-        print("hi")
-        return handType
+g_handTypeToAceBonus = {
+    g_highCards     : 0,
+    g_onePair       : 1,
+    g_twoPair       : 1,
+    g_threeOfAKind  : 2,
+    g_flush         : 0,
+    g_straight      : 0,
+    g_fullHouse     : 5,
+    g_fourOfAKind   : 10,
+    g_fiveOfAKind   : 240,
+}
 
 
 class Card(collections.namedtuple("Card", ["rank", "suit"])):
 
-    rankChars = "23456789TJQKA"
+    rankChars = "9TJQKA"
     suitChars = "SCDH"
-    ranks = tuple(range(2, 15))
+    ranks = tuple(range(len(rankChars)))
     suits = tuple(range(len(suitChars)))
+    aceRank = 14
 
 
     @staticmethod
     def fromStr(cardStr):
         return Card(
-            Card.rankChars.index(cardStr[0]) + 2,
-            Card.suitChars.index(cardStr[1])
+            Card.rankChars.index(cardStr[0]),
+            Card.suitChars.index(cardStr[1]),
         )
 
 
     def __str__(self):
-        return Card.rankChars[self.rank - 2] + Card.suitChars[self.suit]
+        return Card.rankChars[self.rank] + Card.suitChars[self.suit]
 
 
-# TODO: return list of best hand infos: score, typeString, cardsUsed
-def getBestHandAndType(cardStrs):
-    cards = [Card.fromStr(cardStr) for cardStr in cardStrs]
+################################################################################
+# simulation
+
+def simulate(numGames):
+    rand = random.Random()
+    rand.seed(2)
+    gameScores = []
+
+    for gameIdx in range(numGames):
+        print("game={:03}".format(gameIdx))
+
+        claimedHandTypeToScore = {}
+
+        for roundIdx in range(8):
+            print("    round={}".format(roundIdx))
+
+            rolls = [randomCardStrs(5, rand)]
+
+            for rollIdx in range(3):
+                print("        dice={}".format(','.join(rolls[-1])))
+
+                choice = poker_dice(rolls, claimedHandTypeToScore)
+
+                if isinstance(choice, str):
+                    print("        claim={}".format(choice))
+                    if choice in g_handTypeToScore:
+                        claimedHandTypeToScore[choice] \
+                            = g_handTypeToScore[choice]
+                    break
+                else:
+                    print("        keep={}".format(','.join(choice)))
+                    newRoll = choice + randomCardStrs(5 - len(choice), rand)
+                    rolls.append(newRoll)
+
+            roundScore = sum(claimedHandTypeToScore.values())
+            print("        score={:03}".format(roundScore))
+
+        gameScore = sum(claimedHandTypeToScore.values())
+        print("    finalScore={:03}".format(gameScore))
+        gameScores.append(gameScore)
+
+    print("avgGameScore={}".format(sum(gameScores) / len(gameScores)))
+
+
+def getAvgScoreOfChoice(rolls, claimedHandTypeToScore, choice):
+    if len(rolls) == 3 or isinstance(choice, str):
+        return scoreWithChoice(claimedHandTypeToScore, choice)
+
+    numTrials = 50 if len(choice) < 5 else 1
+    scoreSum = 0
+
+    for trialIdx in range(numTrials):
+        newRolls = rolls + [choice + randomCardStrs(5 - len(choice))]
+
+        newChoice = poker_dice(newRolls, claimedHandTypeToScore)
+
+        avgScoreOfNewChoice = getAvgScoreOfChoice(
+            newRolls, claimedHandTypeToScore, newChoice)
+
+        scoreSum += avgScoreOfNewChoice
+
+    return scoreSum / numTrials
+
+
+def scoreWithChoice(claimedHandTypeToScore, choice):
+    choiceScoreDelta = 0
+
+    if isinstance(choice, str):
+        if choice in g_handTypeToScore and choice not in claimedHandTypeToScore:
+            choiceScoreDelta = g_handTypeToScore[choice]
+
+    return choiceScoreDelta + sum(claimedHandTypeToScore.values())
+
+
+def randomCardStrs(numCards, rand=random):
+    return [
+        rand.choice(Card.rankChars) + rand.choice(Card.suitChars)
+        for cardIdx in range(numCards)
+    ]
+
+
+################################################################################
+# decider
+
+def poker_dice_old(rolls, claimedHandTypeToScore):
+    numRollsLeft = 3 - len(rolls)
+    cards = [Card.fromStr(cardStr) for cardStr in rolls[-1]]
+
+    handInfos = getBestHandInfos(cards)
+
+    if numRollsLeft == 0:
+        for handType, hand in handInfos:
+            if handType not in claimedHandTypeToScore:
+                return handType
+
+        # maybe will get lucky and reclaim hand but with aces
+        if handInfos:
+            return handInfos[0][0]
+
+        return "no hand to claim"
+
+    else:
+        if handInfos:
+            return [str(card) for card in handInfos[0][1]]
+
+        # default is to keep aces for slight score bonus
+        return [str(card) for card in cards if card.rank == Card.aceRank]
+
+
+def poker_dice(rolls, claimedHandTypeToScore):
+    numRollsLeft = 3 - len(rolls)
+    cards = [Card.fromStr(cardStr) for cardStr in rolls[-1]]
+
+
+    if numRollsLeft == 0:
+        handInfos = getBestHandInfos(cards)
+
+        for handType, hand in handInfos:
+            if handType not in claimedHandTypeToScore:
+                return handType
+
+        # maybe will get lucky and reclaim hand but with aces
+        if handInfos:
+            return handInfos[0][0]
+
+        return g_highCards
+
+    else:
+        # TODO: instead of trying all subsets of cards to keep, try:
+        # cards of best hand
+        # the triple if we have full house
+        # cards of most common suit (for flush attempt)
+        # at most one ace
+        # all aces
+        # and make sure each subset of cards is unique before branching
+        bestScore = -1
+        bestKeptCards = []
+        keptCardsHist = {}
+
+        for numKeepCards in range(5):
+            for keptCards in itertools.combinations(rolls[-1], numKeepCards):
+                if keptCards in keptCardsHist:
+                    continue
+
+                keptCardList = list(keptCards)
+
+                avgScore = getAvgScoreOfChoice(
+                    rolls, claimedHandTypeToScore, keptCardList)
+
+                keptCardsHist[keptCards] = avgScore
+
+                if avgScore > bestScore:
+                    bestScore = avgScore
+                    bestKeptCards = keptCardList
+
+        return bestKeptCards
+
+
+def getBestHandInfos(cards):
+    if isinstance(cards[0], str):
+        cards = [Card.fromStr(cardStr) for cardStr in cards]
 
     rankToCards = collections.defaultdict(list)
 
@@ -82,14 +245,39 @@ def getBestHandAndType(cardStrs):
 
     countToCards = collections.defaultdict(list)
 
-    for rank, cardsOfRank in rankToCards:
+    for rank, cardsOfRank in rankToCards.items():
         countToCards[len(cardsOfRank)].extend(cardsOfRank)
 
+    handInfos = getSimpleRankMultipleHands(countToCards)
+
+    # full house
+    if 2 in countToCards and 3 in countToCards:
+        handInfos.append((g_fullHouse, cards))
+
+    # two pair
+    if len(countToCards[2]) == 4:
+        handInfos.append((g_twoPair, countToCards[2][:4]))
+
+    # flush
+    if len(set(card.suit for card in cards)) == 1:
+        handInfos.append((g_flush, cards))
+
+    # straight
+    if len(countToCards[1]) == 5:
+        if not rankToCards[Card.ranks[0]] or not rankToCards[Card.ranks[-1]]:
+            handInfos.append((g_straight, cards))
+
+    handInfos = list(reversed(sorted(
+        handInfos,
+        key = lambda info: g_handTypeToScore[info[0]]
+    )))
+
+    return handInfos
+
+
+def getSimpleRankMultipleHands(countToCards):
     handInfos = []
-    appendChildrenOfMultiple(handInfos, countToCards)
 
-
-def appendChildrenOfMultiple(handInfos, countToCards):
     for count in range(5, 1, -1):
         if count in countToCards:
             cards = countToCards[count]
@@ -102,68 +290,13 @@ def appendChildrenOfMultiple(handInfos, countToCards):
             if count >= 2:
                 handInfos.append((g_onePair, cards[:2]))
 
-
-def getRemainingCards(allCards, usedCards):
-    # note: duplicate cards prevent simple set operations
-    remainingCtr = collections.Counter(allCards)
-    remainingCtr.subtract(usedCards)
-    return list(reversed(sorted(remainingCtr.elements())))
-
-
-def getFlush(sortedCards):
-    flushHands = []
-
-    for suit in Card.suits:
-        suitCards = [card for card in sortedCards if card.suit == suit]
-        if len(suitCards) >= 5:
-            flushHands.append(suitCards[:5])
-        else:
-            flushHands.append([])
-
-    return max(flushHands)
-
-
-def getStraight(sortedCards):
-    rankToHighestCard = {card.rank : card for card in reversed(sortedCards)}
-
-    for highRank in reversed(sorted(rankToHighestCard)):
-        straightRanks = list(range(highRank, highRank - 5, -1))
-
-        if all(rank in rankToHighestCard for rank in straightRanks):
-            return [rankToHighestCard[rank] for rank in straightRanks]
-
-    return []
-
-
-def getRankMultiples(sortedCards, cardCounts):
-    rankCtr = collections.Counter(sortedCards)
-    cardsOfRanks = []
-
-    for cardCount in cardCounts:
-        for rank in reversed(Card.ranks):
-            cardsOfRank = [card for card in sortedCards if card.rank == rank]
-
-            if len(cardsOfRank) == cardCount:
-                cardsOfRanks.extend(cardsOfRank)
-                sortedCards = getRemainingCards(sortedCards, cardsOfRank)
-
-    numTotalCardsRequested = sum(cardCounts)
-
-    if len(cardsOfRanks) >= numTotalCardsRequested:
-        return cardsOfRanks[:numTotalCardsRequested]
-
-    return []
-
-
-getFiveOfAKind  = functools.partial(getRankMultiples, cardCounts=[5])
-getFourOfAKind  = functools.partial(getRankMultiples, cardCounts=[4])
-getFullHouse    = functools.partial(getRankMultiples, cardCounts=[3, 2])
-getThreeOfAKind = functools.partial(getRankMultiples, cardCounts=[3])
-getTwoPair      = functools.partial(getRankMultiples, cardCounts=[2, 2])
-getOnePair      = functools.partial(getRankMultiples, cardCounts=[2])
-getHighCards    = functools.partial(getRankMultiples, cardCounts=[1]*5)
+    return handInfos
 
 
 if __name__ == '__main__':
-    getBestHandAndType(["9S","QH","JS","JS","QH"])
+    #handInfos1 = getBestHandInfos(["9S","QH","JS","JS","QH"])
+    #handInfos2 = getBestHandInfos(["9S","QS","JS","TS","KS"])
+    #handInfos3 = getBestHandInfos(["9S","JS","9S","JH","JH"])
+    simulate(1)
+    print()
 
