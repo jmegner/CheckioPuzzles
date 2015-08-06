@@ -14,6 +14,7 @@ note: re-uses some code from texas-referee puzzle from electronic station
 '''
 
 
+import datetime
 import collections
 import functools
 import itertools
@@ -62,7 +63,7 @@ class Card(str):
     suitChars = "SH"
     ranks = tuple(range(len(rankChars)))
     suits = tuple(range(len(suitChars)))
-    lowRank = 5
+    lowRank = 0
     highRank = 5
 
     def rankChar(self): return self[0]
@@ -86,13 +87,15 @@ def simulate(numGames):
 
         for roundIdx in range(8):
             print("    round={}".format(roundIdx))
+            print("        prevClaims: {}".format(
+                ", ".join(claimedHandTypeToScore.keys())))
 
             rolls = [randomCards(5, rand)]
 
             for rollIdx in range(3):
                 print("        dice={}".format(','.join(rolls[-1])))
 
-                choice = poker_dice(rolls, claimedHandTypeToScore)
+                choice = poker_dice(rolls, claimedHandTypeToScore.copy())
 
                 if isinstance(choice, str):
                     print("        claim={}".format(choice))
@@ -114,16 +117,22 @@ def simulate(numGames):
 
     avgGameScore = sum(gameScores) / len(gameScores)
     pentaGameScore = 5 * avgGameScore
-    print("avgGameScore={}, pentaGameScore={}".format(
-        avgGameScore, pentaGameScore))
+    print("gameScores: max={}, avg={}, avgPenta={}".format(
+        max(gameScores), avgGameScore, pentaGameScore))
 
 
 ################################################################################
 # decider
 
-def poker_dice(rolls, claimedHandTypeToScore):
+def poker_dice(rolls, claimedHandTypeToScore, focusOnFiveOfAKind=True):
+    '''
+    focusOnFiveOfAKind being True tries to maximize chances of getting a high
+    score; focusOnFiveOfAKind being False tries to maximize your average score
+    '''
+
     numRollsLeft = 3 - len(rolls)
     cards = [Card(card) for card in rolls[-1]]
+    cards = sorted(cards, key = lambda card: -card.rank())
 
     handInfos = getBestHandInfos(cards)
 
@@ -137,23 +146,35 @@ def poker_dice(rolls, claimedHandTypeToScore):
             return handInfos[0][0]
 
         return g_highCards
+
     else:
-        trialHands = set()
+        if focusOnFiveOfAKind and g_fiveOfAKind not in claimedHandTypeToScore:
+            bestHandTypesForFutureFiveOfAKind = [
+                g_fiveOfAKind, g_fourOfAKind, g_threeOfAKind, g_onePair,
+            ]
+
+            for handType, hand in handInfos:
+                if handType in bestHandTypesForFutureFiveOfAKind:
+                    return hand
+
+            return getAces(cards)
+
+        trialHands = []
 
         if handInfos:
             # cards of best hand
-            trialHands.add(tuple(handInfos[0][1]))
+            trialHands.append(handInfos[0][1])
 
             # triple if we have a full house
             for handType, hand in handInfos:
                 if handType == g_fullHouse:
-                    trialHands.add(tuple(hand[3:]))
+                    trialHands.append(hand[3:])
                     break
 
             # one pair if we have two pair
             for handType, hand in handInfos:
                 if handType == g_twoPair:
-                    trialHands.add(tuple(hand[:2]))
+                    trialHands.append(hand[:2])
                     break
 
         # flush attempt
@@ -164,18 +185,31 @@ def poker_dice(rolls, claimedHandTypeToScore):
                 suitCharToCards[card.suitChar()].append(card)
 
             flushAttempt = max(suitCharToCards.values(), key=len)
-            trialHands.add(tuple(flushAttempt))
+            trialHands.append(flushAttempt)
 
-        atMostOneAce = [
-            card for card in cards if card.rank() == Card.highRank]
+        # straight attempt
+        if g_straight not in claimedHandTypeToScore:
+            straightAttempt = []
 
-        trialHands.add(tuple(atMostOneAce))
+            for card in cards:
+                if card not in straightAttempt:
+                    straightAttempt.append(card)
+
+            # straight impossible if have both 9 and ace
+            if(Card.allCards[0] in straightAttempt
+                and Card.allCards[-1] in straightAttempt
+            ):
+                straightAttempt.remove(Card.allCards[0])
+
+            trialHands.append(straightAttempt)
+
+        atMostOneAce = getAces(cards)
+        trialHands.append(atMostOneAce)
 
         bestScore = -1
         bestTrialHand = []
 
         for trialHand in trialHands:
-            trialHand = list(trialHand)
 
             expectedScore = getAvgScoreOfChoice(
                 rolls, claimedHandTypeToScore, trialHand)
@@ -184,7 +218,16 @@ def poker_dice(rolls, claimedHandTypeToScore):
                 bestScore = expectedScore
                 bestTrialHand = trialHand
 
+        if len(bestTrialHand) == 5:
+            for handType, hand in handInfos:
+                if hand == bestTrialHand:
+                    return handType
+
         return bestTrialHand
+
+
+def getAces(cards):
+    return [card for card in cards if card.rank() == Card.highRank]
 
 
 def getAvgScoreOfChoice(rolls, claimedHandTypeToScore, choice):
@@ -193,70 +236,51 @@ def getAvgScoreOfChoice(rolls, claimedHandTypeToScore, choice):
     if numRollsLeft == 0 or isinstance(choice, str):
         return scoreWithChoice(claimedHandTypeToScore, choice)
 
-    multiplicities = getMultiplicities(getCountToCards(
+    multis = getMultiplicities(getCountToCards(
         getRankCharToCards(choice)))
 
     expectedScore = scoreWithChoice(claimedHandTypeToScore, "")
 
     if g_fiveOfAKind not in claimedHandTypeToScore:
-        prob = alterProb(getProbFiveOfAKind(multiplicities[0]), numRollsLeft)
+        prob = alterProb(getProbFiveOfAKind(multis), numRollsLeft)
         expectedScore += prob * g_handTypeToScore[g_fiveOfAKind]
 
     if g_fourOfAKind not in claimedHandTypeToScore:
-        prob = alterProb(getProbFourOfAKind(multiplicities[0]), numRollsLeft)
+        prob = alterProb(getProbFourOfAKind(multis), numRollsLeft)
         expectedScore += prob * g_handTypeToScore[g_fourOfAKind]
 
     if g_threeOfAKind not in claimedHandTypeToScore:
-        prob = alterProb(getProbThreeOfAKind(multiplicities[0]), numRollsLeft)
+        prob = alterProb(getProbThreeOfAKind(multis), numRollsLeft)
         expectedScore += prob * g_handTypeToScore[g_threeOfAKind]
 
     if g_onePair not in claimedHandTypeToScore:
-        prob = alterProb(getProbOnePair(multiplicities[0]), numRollsLeft)
+        prob = alterProb(getProbOnePair(multis), numRollsLeft)
         expectedScore += prob * g_handTypeToScore[g_onePair]
 
     if g_fullHouse not in claimedHandTypeToScore:
-        prob = alterProb(getProbFullHouse(multiplicities), numRollsLeft)
+        prob = alterProb(getProbFullHouse(multis), numRollsLeft)
         expectedScore += prob * g_handTypeToScore[g_fullHouse]
 
     if g_twoPair not in claimedHandTypeToScore:
-        prob = alterProb(getProbTwoPair(multiplicities), numRollsLeft)
+        prob = alterProb(getProbTwoPair(multis), numRollsLeft)
         expectedScore += prob * g_handTypeToScore[g_twoPair]
 
-    suitCounts = [0, 0]
-
-    for card in choice:
-        suitCounts[card.suit()] += 1
-
     if g_flush not in claimedHandTypeToScore:
+        suitCounts = [0, 0]
+        for card in choice:
+            suitCounts[card.suit()] += 1
+
         prob = alterProb(getProbFlush(max(suitCounts)), numRollsLeft)
         expectedScore += prob * g_handTypeToScore[g_flush]
 
-    ranks = [card.rank() for card in choice]
-
     if g_straight not in claimedHandTypeToScore:
+        ranks = [card.rank() for card in choice]
         prob = alterProb(
-            getProbStraight(ranks, multiplicities[0]),
+            getProbStraight(ranks, multis),
             numRollsLeft)
         expectedScore += prob * g_handTypeToScore[g_straight]
 
     return expectedScore
-
-    '''
-    numTrials = 30 if len(choice) < 5 else 1
-    scoreSum = 0
-
-    for trialIdx in range(numTrials):
-        newRolls = rolls + [choice + randomCards(5 - len(choice))]
-
-        newChoice = poker_dice(newRolls, claimedHandTypeToScore)
-
-        avgScoreOfNewChoice = getAvgScoreOfChoice(
-            newRolls, claimedHandTypeToScore, newChoice)
-
-        scoreSum += avgScoreOfNewChoice
-
-    return scoreSum / numTrials
-    '''
 
 
 def alterProb(prob, numAttempts):
@@ -359,61 +383,65 @@ def getMultiplicities(countToCards):
         return [max(countToCards.keys())]
 
 
-def getProbFiveOfAKind(biggestMultiplicity):
-    return (1 / 6) ** (5 - biggestMultiplicity)
+def getProbFiveOfAKind(multis):
+    if len(multis) > 1:
+        return 0
+    return (1 / 6) ** (5 - multis[0])
 
 
-def getProbFourOfAKind(multi):
-    if multi >= 4:
+def getProbFourOfAKind(multis):
+    if len(multis) > 1:
+        return 0
+    if multis[0] >= 4:
         return 1
-    if multi == 3:
+    if multis[0] == 3:
         return 11 / 36
-    if multi == 2:
+    if multis[0] == 2:
         return 16 / 216
     return 21 / 1296
 
 
-def getProbThreeOfAKind(multi):
-    if multi >= 3:
+def getProbThreeOfAKind(multis):
+    if multis == [3, 2]:
         return 1
-    if multi == 2:
+    if multis == [2, 2]:
+        return 1 / 6
+    if multis[0] >= 3:
+        return 1
+    if multis[0] == 2:
         return 191 / 216
     return 171 / 1296
 
 
-def getProbOnePair(multi):
-    if multi >= 2:
+def getProbOnePair(multis):
+    if multis[0] >= 2:
         return 1
     return 671 / 1296
 
 
 def getProbTwoPair(multis):
-    multi = multis[0]
-
     if multis == [3, 2] or multis == [2, 2]:
         return 1
-    if multi >= 4:
+    if multis[0] >= 4:
         return 0
-    if multi == 3:
+    if multis[0] == 3:
         return 1 / 6
-    if multi == 2:
+    if multis[0] == 2:
         return 16 / 36
 
     return 0.2702
 
 
 def getProbFullHouse(multis):
-    multi = multis[0]
-
     if multis == [3, 2]:
         return 1
     if multis == [2, 2]:
         return 1 / 3
-    if multi >= 4:
+    if multis[0] >= 4:
         return 0
-    if multi == 3:
+    if multis[0] == 3:
         return 1 / 6
-    if multi == 2:
+    if multis[0] == 2:
         return 6 / 216
 
     return 30 / 1296
@@ -423,8 +451,8 @@ def getProbFlush(multi):
     return 0.5 ** (5 - multi)
 
 
-def getProbStraight(ranks, multi):
-    if multi > 1:
+def getProbStraight(ranks, multis):
+    if multis[0] > 1:
         return 0
 
     if not ranks:
@@ -444,9 +472,6 @@ def getProbStraight(ranks, multi):
 
 
 if __name__ == '__main__':
-    #handInfos1 = getBestHandInfos(["9S","QH","JS","JS","QH"])
-    #handInfos2 = getBestHandInfos(["9S","QS","JS","TS","KS"])
-    #handInfos3 = getBestHandInfos(["9S","JS","9S","JH","JH"])
-    simulate(10)
-    print("hi")
+    simulate(5)
+    print(str(datetime.datetime.now()))
 
