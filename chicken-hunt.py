@@ -14,6 +14,7 @@ https://github.com/jmegner/CheckioPuzzles
 
 import math
 import random
+import collections
 
 
 DIRS = {
@@ -28,52 +29,108 @@ DIRS = {
     "": (0, 0),
 }
 
-HOBBIT_SELF = "I"
-HOBBIT_OTHER = "S"
-CHICKEN = "C"
+class Misc:
+    s_hobbitSelf = "I"
+    s_hobbitOther = "S"
+    s_chicken = "C"
+    s_open = "."
+    s_wall = "X"
+
+
+class Loc(collections.namedtuple('Loc', ['r', 'c'])):
+
+    def __add__(self, other): return Loc(self.r + other.r, self.c + other.c)
+    def __mul__(self, scale): return Loc(self.r * scale, self.c * scale)
+    def getAt(self, grid): return grid[self.r][self.c]
+    def setAt(self, grid, val): grid[self.r][self.c] = val
+
+    def inBounds(self, grid):
+        return ( self.r >= 0 and self.c >= 0
+            and self.r < len(grid)
+            and self.c < len(grid[self.r]) )
+
+    def euclidDist(self, other):
+        return math.hypot(self.r - other.r, self.c - other.c)
+
+    def principalNeighbors(self, grid=None):
+        neighbors = []
+
+        for delta in Loc.s_principalDels.keys():
+            newLoc = self + delta
+            if grid is None or newLoc.inBounds(grid):
+                neighbors.append(newLoc)
+
+        return neighbors
+
+
+Loc.s_principalDels = collections.OrderedDict([
+    (Loc(-1, +0), 'N'),
+    (Loc(-1, +1), 'NE'),
+    (Loc(+0, +1), 'E'),
+    (Loc(+1, +1), 'SE'),
+    (Loc(+1, +0), 'S'),
+    (Loc(+1, -1), 'SW'),
+    (Loc(+0, -1), 'W'),
+    (Loc(-1, -1), 'NW'),
+    #(Loc(+0, +0), ''),
+])
 
 
 def hunt(yard):
-    myLoc = findChar(yard, HOBBIT_SELF)
-    partnerLoc = findChar(yard, HOBBIT_OTHER)
+    myLoc = findChar(yard, Misc.s_hobbitSelf)
+    partnerLoc = findChar(yard, Misc.s_hobbitOther)
 
     if myLoc < partnerLoc:
         return ""
 
-    chickenLoc = findChar(yard, CHICKEN)
-    adjDirsAndLocs = findFreeAdjacent(yard, myLoc)
+    chickenLoc = findChar(yard, Misc.s_chicken)
 
-    myNextDirAndLoc = min(adjDirsAndLocs, key = lambda dirAndLoc: math.hypot(
-        dirAndLoc[1][0] - chickenLoc[0], dirAndLoc[1][1] - chickenLoc[1])
-    )
+    dists = findDistsFromLoc(yard, chickenLoc)
 
-    return myNextDirAndLoc[0]
+    return ""
+
+
+def findDistsFromLoc(yard, startLoc):
+    dists = [[None] * len(yard[0]) for row in yard]
+
+    startLoc.setAt(dists, 0)
+    frontier = collections.deque([startLoc])
+
+    while frontier:
+        newlySolvedLoc = frontier.popleft()
+        newlySolvedDist = newlySolvedLoc.getAt(dists)
+
+        for neighbor in newlySolvedLoc.principalNeighbors(yard):
+            if neighbor.getAt(yard) == Misc.s_wall:
+                continue
+
+            neighborDist = neighbor.getAt(dists)
+
+            if neighborDist is None or newlySolvedDist + 1 < neighborDist:
+                neighbor.setAt(dists, newlySolvedDist + 1)
+                frontier.append(neighbor)
+
+    return dists
 
 
 def findChar(yard, symb):
-    for i, row in enumerate(yard):
-        for j, ch in enumerate(row):
+    for r, row in enumerate(yard):
+        for c, ch in enumerate(row):
             if ch == symb:
-                return i, j
+                return Loc(r, c)
     return None, None
 
 
-def findFreeAdjacent(yard, position):
-    x, y = position
-    result = [("", position)]
-    for k, (dx, dy) in DIRS.items():
-        nx, ny = x + dx, y + dy
-        if 0 <= nx < len(yard) and 0 <= ny < len(yard[0]) and yard[nx][ny] == ".":
-            result.append((k, (nx, ny)))
-    return result
-
-
 if __name__ == "__main__":
-    # These checker is using only for your local testing
-    # It's run function in the same environment, but in the grading it will be in various
+    # These checker is using only for your local testing;
+    # It's run function in the same environment,
+    # but in the grading it will be in various;
     from random import choice
     from re import sub
     from math import hypot
+
+    def clear_user_globals():
+        pass
 
     def random_chicken(_, possible):
         return choice(possible)
@@ -125,34 +182,49 @@ if __name__ == "__main__":
         result = [("", position)]
         for k, (dx, dy) in DIRS.items():
             nx, ny = x + dx, y + dy
-            if 0 <= nx < len(yard) and 0 <= ny < len(yard[0]) and yard[nx][ny] == ".":
+            if(0 <= nx < len(yard) and 0 <= ny < len(yard[0])
+                and yard[nx][ny] == "."
+            ):
                 result.append((k, (nx, ny)))
         return result
 
     def prepare_yard(yard, numb):
-        return tuple(sub("\d", "S", row.replace(str(numb), "I")) for row in yard)
+        return tuple(sub("\d", "S", row.replace(str(numb), "I"))
+            for row in yard)
 
     def checker(func, yard, chicken_algorithm="random"):
+        clear_user_globals()
+
         for _ in range(MAX_STEP):
             individual_yards = [prepare_yard(yard, i + 1) for i in range(N)]
             results = [func(y) for y in individual_yards]
-            if any(not isinstance(r, str) or r not in DIRS.keys() for r in results):
+
+            if any(not isinstance(r, str) or r not in DIRS.keys()
+                for r in results
+            ):
                 print(ERROR_TYPE)
                 return False
+
             chicken = find_position(yard, "C")
             possibles = find_free(yard, chicken)
-            chicken_action, new_chicken = CHICKEN_ALGORITHM[chicken_algorithm](yard, possibles)
+            chicken_action, new_chicken = CHICKEN_ALGORITHM[chicken_algorithm](
+                yard, possibles)
             positions = [find_position(yard, str(i + 1)) for i in range(N)]
             new_positions = []
+
             for i, (x, y) in enumerate(positions):
                 nx, ny = x + DIRS[results[i]][0], y + DIRS[results[i]][1]
+
                 if not (0 <= nx < len(yard) and 0 <= ny < len(yard[0])):
                     print(ERROR_FENCE)
                     return False
+
                 if yard[nx][ny] == "X":
                     print(ERROR_TREE)
                     return False
+
                 new_positions.append((nx, ny))
+
             if len(set(new_positions)) != len(new_positions):
                 print(ERROR_HOBBITS)
                 return False
@@ -162,11 +234,16 @@ if __name__ == "__main__":
                 return True
 
             # update yard
-            temp_yard = [[ch if ch in ".X" else "." for ch in row] for row in yard]
+            temp_yard = [
+                [ch if ch in ".X" else "." for ch in row]
+                for row in yard]
+
             for i, (x, y) in enumerate(new_positions):
                 temp_yard[x][y] = str(i + 1)
+
             temp_yard[new_chicken[0]][new_chicken[1]] = "C"
             yard = tuple("".join(row) for row in temp_yard)
+
         print(ERROR_TIRED)
         return False
 

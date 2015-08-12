@@ -1,7 +1,18 @@
+'''
+author: Jacob Egner
+date: unknown
+island: unknown
+
+puzzle URLs:
+unknown
+unknown
+
+for latest versions of my solutions, see my checkio solution github repo:
+https://github.com/jmegner/CheckioPuzzles
+'''
+
+
 import itertools
-
-
-#class Loc(collections.namedtuple('Loc', ['r', 'c'])): pass
 
 
 def common(word1, word2):
