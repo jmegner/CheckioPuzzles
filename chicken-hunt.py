@@ -12,9 +12,10 @@ https://github.com/jmegner/CheckioPuzzles
 '''
 
 
+import collections
+import itertools
 import math
 import random
-import collections
 
 
 DIRS = {
@@ -39,10 +40,13 @@ class Misc:
 
 class Loc(collections.namedtuple('Loc', ['r', 'c'])):
 
+    def __neg__(self): return Loc(-self.r, -self.c)
     def __add__(self, other): return Loc(self.r + other.r, self.c + other.c)
+    def __sub__(self, other): return self + -other
     def __mul__(self, scale): return Loc(self.r * scale, self.c * scale)
-    def getAt(self, grid): return grid[self.r][self.c]
-    def setAt(self, grid, val): grid[self.r][self.c] = val
+
+    def getVal(self, grid): return grid[self.r][self.c]
+    def setVal(self, grid, val): grid[self.r][self.c] = val
 
     def inBounds(self, grid):
         return ( self.r >= 0 and self.c >= 0
@@ -52,12 +56,15 @@ class Loc(collections.namedtuple('Loc', ['r', 'c'])):
     def euclidDist(self, other):
         return math.hypot(self.r - other.r, self.c - other.c)
 
-    def principalNeighbors(self, grid=None):
+    def principalNeighbors(self, grid=None, includeSelf=False):
         neighbors = []
 
         for delta in Loc.s_principalDels.keys():
             newLoc = self + delta
-            if grid is None or newLoc.inBounds(grid):
+
+            if((includeSelf or delta.r or delta.c)
+                and (grid is None or newLoc.inBounds(grid))
+            ):
                 neighbors.append(newLoc)
 
         return neighbors
@@ -72,42 +79,57 @@ Loc.s_principalDels = collections.OrderedDict([
     (Loc(+1, -1), 'SW'),
     (Loc(+0, -1), 'W'),
     (Loc(-1, -1), 'NW'),
-    #(Loc(+0, +0), ''),
+    (Loc(+0, +0), ''),
 ])
 
 
 def hunt(yard):
     myLoc = findChar(yard, Misc.s_hobbitSelf)
-    partnerLoc = findChar(yard, Misc.s_hobbitOther)
-
-    if myLoc < partnerLoc:
-        return ""
+    otherLoc = findChar(yard, Misc.s_hobbitOther)
+    hobALoc = min(myLoc, otherLoc)
+    hobBLoc = max(myLoc, otherLoc)
 
     chickenLoc = findChar(yard, Misc.s_chicken)
 
     dists = findDistsFromLoc(yard, chickenLoc)
+    distToHobA = hobALoc.getVal(dists)
+    distToHobB = hobBLoc.getVal(dists)
 
-    return ""
+    hobANextClosestLocs = nextClosestLocs(dists, hobALoc)
+    hobBNextClosestLocs = nextClosestLocs(dists, hobBLoc)
+
+    hobANextLoc, hobBNextLoc = min(
+        [locPair for locPair in itertools.product(
+            hobANextClosestLocs + [hobALoc], hobBNextClosestLocs + [hobBLoc])
+            if locPair[0] != locPair[1]],
+        key = lambda locPair:
+            locPair[0].getVal(dists) + locPair[1].getVal(dists)
+    )
+
+    if myLoc == hobALoc:
+        return Loc.s_principalDels[hobANextLoc - hobALoc]
+
+    return Loc.s_principalDels[hobBNextLoc - hobBLoc]
 
 
 def findDistsFromLoc(yard, startLoc):
     dists = [[None] * len(yard[0]) for row in yard]
 
-    startLoc.setAt(dists, 0)
+    startLoc.setVal(dists, 0)
     frontier = collections.deque([startLoc])
 
     while frontier:
         newlySolvedLoc = frontier.popleft()
-        newlySolvedDist = newlySolvedLoc.getAt(dists)
+        newlySolvedDist = newlySolvedLoc.getVal(dists)
 
         for neighbor in newlySolvedLoc.principalNeighbors(yard):
-            if neighbor.getAt(yard) == Misc.s_wall:
+            if neighbor.getVal(yard) == Misc.s_wall:
                 continue
 
-            neighborDist = neighbor.getAt(dists)
+            neighborDist = neighbor.getVal(dists)
 
             if neighborDist is None or newlySolvedDist + 1 < neighborDist:
-                neighbor.setAt(dists, newlySolvedDist + 1)
+                neighbor.setVal(dists, newlySolvedDist + 1)
                 frontier.append(neighbor)
 
     return dists
@@ -119,6 +141,16 @@ def findChar(yard, symb):
             if ch == symb:
                 return Loc(r, c)
     return None, None
+
+
+def nextClosestLocs(dists, currLoc):
+    currDist = currLoc.getVal(dists)
+    nextLocs = [
+        neighbor for neighbor in currLoc.principalNeighbors(dists)
+        if neighbor.getVal(dists) == currDist - 1
+    ]
+
+    return nextLocs
 
 
 if __name__ == "__main__":
