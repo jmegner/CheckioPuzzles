@@ -124,7 +124,7 @@ def simulate(numGames):
 ################################################################################
 # decider
 
-def poker_dice(rolls, claimedHandTypeToScore, focusOnFiveOfAKind=True):
+def poker_dice(rolls, claimedHandTypeToScore, focusOnFiveOfAKind=False):
     '''
     focusOnFiveOfAKind being True tries to maximize chances of getting a high
     score; focusOnFiveOfAKind being False tries to maximize your average score
@@ -367,7 +367,11 @@ def getCountToCards(rankCharToCards):
     countToCards = collections.defaultdict(list)
 
     for rank, cardsOfRank in rankCharToCards.items():
-        countToCards[len(cardsOfRank)].extend(cardsOfRank)
+        count = len(cardsOfRank)
+        countToCards[count] = sorted(
+            countToCards[count] + cardsOfRank,
+            key = lambda card: -card.rank()
+        )
 
     return countToCards
 
