@@ -1,3 +1,13 @@
+'''
+author: Jacob Egner
+date: 2015-06-??
+island: home
+
+for latest versions of my solutions, see my checkio solution github repo:
+https://github.com/jmegner/CheckioPuzzles
+'''
+
+
 FIRST_TEN = ["ERROR1", "one", "two", "three", "four", "five", "six", "seven",
              "eight", "nine"]
 SECOND_TEN = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
@@ -26,9 +36,7 @@ def checkio(number):
         if ones:
             english += FIRST_TEN[ones] + " "
 
-    if english[-1] == " ":
-        english = english[:-1]
-
+    english = english.strip()
     return english
 
 
