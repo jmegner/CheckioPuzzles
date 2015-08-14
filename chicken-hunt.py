@@ -83,9 +83,20 @@ Loc.s_principalDels = collections.OrderedDict([
 ])
 
 
+g_algoRandom = "random"
+g_algoAway = "run_away"
+g_algoHunter = "hunter"
+
+g_prevYard = []
+g_possibleChickenAlgos = {g_algoRandom, g_algoAway, g_algoHunter}
+
+!#TODO: from prevYard and yard, filter chicken algos and also predict next possible chicken locs
+
+
 def hunt(yard):
     myLoc = findChar(yard, Misc.s_hobbitSelf)
     otherLoc = findChar(yard, Misc.s_hobbitOther)
+
     hobALoc = min(myLoc, otherLoc)
     hobBLoc = max(myLoc, otherLoc)
 
@@ -105,6 +116,8 @@ def hunt(yard):
         key = lambda locPair:
             locPair[0].getVal(dists) + locPair[1].getVal(dists)
     )
+
+    g_prevYard = yard
 
     if myLoc == hobALoc:
         return Loc.s_principalDels[hobANextLoc - hobALoc]
@@ -162,7 +175,8 @@ if __name__ == "__main__":
     from math import hypot
 
     def clear_user_globals():
-        pass
+        global g_prevYard
+        g_prevYard = []
 
     def random_chicken(_, possible):
         return choice(possible)
@@ -286,7 +300,7 @@ if __name__ == "__main__":
         ".XX.X.",
         "...2..",
         "......",
-        ), "random"), "Example 1"
+        ), "random"), "Prompt Example Random"
 
     assert checker(hunt, (
         "......",
@@ -295,7 +309,7 @@ if __name__ == "__main__":
         ".XX.X.",
         "...2..",
         "......",
-        ), "run_away"), "Example 1"
+        ), "run_away"), "Prompt Example Away"
 
     assert checker(hunt, (
         "......",
@@ -304,7 +318,7 @@ if __name__ == "__main__":
         ".XX.X.",
         "...2..",
         "......",
-        ), "hunter"), "Example 1"
+        ), "hunter"), "Prompt Example Hunter"
 
     assert checker(hunt, (
         "1.........",
