@@ -56,16 +56,22 @@ class Loc(collections.namedtuple('Loc', ['r', 'c'])):
     def euclidDist(self, other):
         return math.hypot(self.r - other.r, self.c - other.c)
 
-    def principalNeighbors(self, grid=None, includeSelf=False):
+    def principalNeighbors(
+        self,
+        grid=None,
+        onlyIncludeOpenOrSelf=False,
+    ):
         neighbors = []
 
         for delta in Loc.s_principalDels.keys():
             newLoc = self + delta
 
-            if((includeSelf or delta.r or delta.c)
-                and (grid is None or newLoc.inBounds(grid))
-            ):
-                neighbors.append(newLoc)
+            if grid is None or newLoc.inBounds(grid):
+                isSelf = delta == Loc(0, 0)
+                isOpen = newLoc.getVal(grid) == Misc.s_open
+
+                if isSelf or isOpen or not onlyIncludeOpenOrSelf:
+                    neighbors.append(newLoc)
 
         return neighbors
 
@@ -86,14 +92,21 @@ Loc.s_principalDels = collections.OrderedDict([
 g_algoRandom = "random"
 g_algoAway = "run_away"
 g_algoHunter = "hunter"
+g_allPossibleChickenAlgos = {g_algoRandom, g_algoAway, g_algoHunter}
 
 g_prevYard = []
-g_possibleChickenAlgos = {g_algoRandom, g_algoAway, g_algoHunter}
-
-!#TODO: from prevYard and yard, filter chicken algos and also predict next possible chicken locs
+g_possibleChickenAlgos = g_allPossibleChickenAlgos.copy()
 
 
 def hunt(yard):
+    global g_prevYard
+    global g_possibleChickenAlgos
+
+    if g_prevYard:
+        g_possibleChickenAlgos &= getPossibleChickenAlgos(g_prevYard, yard)
+    else:
+        g_possibleChickenAlgos = g_allPossibleChickenAlgos
+
     myLoc = findChar(yard, Misc.s_hobbitSelf)
     otherLoc = findChar(yard, Misc.s_hobbitOther)
 
@@ -101,6 +114,8 @@ def hunt(yard):
     hobBLoc = max(myLoc, otherLoc)
 
     chickenLoc = findChar(yard, Misc.s_chicken)
+
+    #TODO: move towards where chicken will be, not where it is
 
     dists = findDistsFromLoc(yard, chickenLoc)
     distToHobA = hobALoc.getVal(dists)
@@ -123,6 +138,60 @@ def hunt(yard):
         return Loc.s_principalDels[hobANextLoc - hobALoc]
 
     return Loc.s_principalDels[hobBNextLoc - hobBLoc]
+
+
+def getPossibleChickenAlgos(prevYard, currYard):
+    prevHobSelfLoc = findChar(prevYard, Misc.s_hobbitSelf)
+    currHobSelfLoc = findChar(currYard, Misc.s_hobbitSelf)
+
+    prevHobOtherLoc = findChar(prevYard, Misc.s_hobbitOther)
+    currHobOtherLoc = findChar(currYard, Misc.s_hobbitOther)
+
+    prevChickenLoc = findChar(prevYard, Misc.s_chicken)
+    currChickenLoc = findChar(currYard, Misc.s_chicken)
+
+    if(currHobSelfLoc == prevHobOtherLoc
+        and currHobOtherLoc == prevHobSelfLoc
+    ):
+        if currChickenLoc == prevChickenLoc:
+            return g_allPossibleChickenAlgos
+        raise ValueError("weird yard pair")
+
+    awayChickenLocs = getNextChickenLocs(prevYard, max)
+    hunterChickenLocs = getNextChickenLocs(prevYard, min)
+
+    possibleChickenAlgos = {g_algoRandom}
+    possibleChickenNextLocs = []
+
+    if currChickenLoc in awayChickenLocs:
+        possibleChickenAlgos.add(g_algoAway)
+
+    if currChickenLoc in hunterChickenLocs:
+        possibleChickenAlgos.add(g_algoHunter)
+
+    return possibleChickenAlgos
+
+
+def getNextChickenLocs(yard, distSelector):
+    chickenLoc = findChar(yard, Misc.s_chicken)
+    hobSelfLoc = findChar(yard, Misc.s_hobbitSelf)
+    hobOtherLoc = findChar(yard, Misc.s_hobbitOther)
+
+    potentialNextChickenLocs = chickenLoc.principalNeighbors(yard, True)
+
+    potentialChickenDists = [
+        min(loc.euclidDist(hobSelfLoc), loc.euclidDist(hobOtherLoc))
+        for loc in potentialCurrChickenLocs
+    ]
+
+    selectedDist = distSelector(potentialChickenDists)
+
+    nextChickenLocs = [
+        loc for i, loc in enumerate(potentialNextChickenLocs)
+        if potentialChickenDists[i] == selectedDist
+    ]
+
+    return nextChickenLocs
 
 
 def findDistsFromLoc(yard, startLoc):
@@ -173,10 +242,6 @@ if __name__ == "__main__":
     from random import choice
     from re import sub
     from math import hypot
-
-    def clear_user_globals():
-        global g_prevYard
-        g_prevYard = []
 
     def random_chicken(_, possible):
         return choice(possible)
@@ -239,7 +304,8 @@ if __name__ == "__main__":
             for row in yard)
 
     def checker(func, yard, chicken_algorithm="random"):
-        clear_user_globals()
+        # clear user globals
+        g_prevYard = []
 
         for _ in range(MAX_STEP):
             individual_yards = [prepare_yard(yard, i + 1) for i in range(N)]
