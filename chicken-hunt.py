@@ -102,10 +102,11 @@ def hunt(yard):
     global g_prevYard
     global g_possibleChickenAlgos
 
-    if g_prevYard:
-        g_possibleChickenAlgos &= getPossibleChickenAlgos(g_prevYard, yard)
-    else:
+    if isNewYard(g_prevYard, yard):
+        g_prevYard = []
         g_possibleChickenAlgos = g_allPossibleChickenAlgos
+    else:
+        g_possibleChickenAlgos &= getPossibleChickenAlgos(g_prevYard, yard)
 
     myLoc = findChar(yard, Misc.s_hobbitSelf)
     otherLoc = findChar(yard, Misc.s_hobbitOther)
@@ -114,12 +115,11 @@ def hunt(yard):
     hobBLoc = max(myLoc, otherLoc)
 
     chickenLoc = findChar(yard, Misc.s_chicken)
-
+    awayChickenLocs = getNextChickenLocs(yard, max)
+    awayDists = [findDistsFromLoc(yard, loc) for loc in awayChickenLocs]
     #TODO: move towards where chicken will be, not where it is
 
     dists = findDistsFromLoc(yard, chickenLoc)
-    distToHobA = hobALoc.getVal(dists)
-    distToHobB = hobBLoc.getVal(dists)
 
     hobANextClosestLocs = nextClosestLocs(dists, hobALoc)
     hobBNextClosestLocs = nextClosestLocs(dists, hobBLoc)
@@ -140,6 +140,41 @@ def hunt(yard):
     return Loc.s_principalDels[hobBNextLoc - hobBLoc]
 
 
+def isNewYard(prevYard, currYard):
+    if not prevYard:
+        return True
+
+    if len(prevYard) != len(currYard) or len(prevYard[0]) != len(currYard[0]):
+        return True
+
+    for r in range(len(currYard)):
+        for c in range(len(currYard[r])):
+            if((prevYard[r][c] == Misc.s_wall)
+                != (currYard[r][c] == Misc.s_wall)
+            ):
+                return True
+
+    prevChickenLoc = findChar(prevYard, Misc.s_chicken)
+    currChickenLoc = findChar(currYard, Misc.s_chicken)
+
+    if prevChickenLoc.euclidDist(currChickenLoc) >= 2:
+        return True
+
+    prevHobSelfLoc = findChar(prevYard, Misc.s_hobbitSelf)
+    currHobSelfLoc = findChar(currYard, Misc.s_hobbitSelf)
+
+    prevHobOtherLoc = findChar(prevYard, Misc.s_hobbitOther)
+    currHobOtherLoc = findChar(currYard, Misc.s_hobbitOther)
+
+    if prevHobSelfLoc.euclidDist(currHobOtherLoc) >= 2:
+        return True
+
+    if currHobSelfLoc.euclidDist(prevHobOtherLoc) >= 2:
+        return True
+
+    return False
+
+
 def getPossibleChickenAlgos(prevYard, currYard):
     prevHobSelfLoc = findChar(prevYard, Misc.s_hobbitSelf)
     currHobSelfLoc = findChar(currYard, Misc.s_hobbitSelf)
@@ -149,13 +184,6 @@ def getPossibleChickenAlgos(prevYard, currYard):
 
     prevChickenLoc = findChar(prevYard, Misc.s_chicken)
     currChickenLoc = findChar(currYard, Misc.s_chicken)
-
-    if(currHobSelfLoc == prevHobOtherLoc
-        and currHobOtherLoc == prevHobSelfLoc
-    ):
-        if currChickenLoc == prevChickenLoc:
-            return g_allPossibleChickenAlgos
-        raise ValueError("weird yard pair")
 
     awayChickenLocs = getNextChickenLocs(prevYard, max)
     hunterChickenLocs = getNextChickenLocs(prevYard, min)
@@ -181,7 +209,7 @@ def getNextChickenLocs(yard, distSelector):
 
     potentialChickenDists = [
         min(loc.euclidDist(hobSelfLoc), loc.euclidDist(hobOtherLoc))
-        for loc in potentialCurrChickenLocs
+        for loc in potentialNextChickenLocs
     ]
 
     selectedDist = distSelector(potentialChickenDists)
@@ -308,6 +336,7 @@ if __name__ == "__main__":
         g_prevYard = []
 
         for _ in range(MAX_STEP):
+            print("\n".join(yard) + "\n")
             individual_yards = [prepare_yard(yard, i + 1) for i in range(N)]
             results = [func(y) for y in individual_yards]
 
