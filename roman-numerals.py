@@ -1,3 +1,17 @@
+'''
+author: Jacob Egner
+date: 2015-06-??
+island: home
+
+puzzle URLs:
+http://www.checkio.org/mission/roman-numerals/
+https://github.com/Bryukh-Checkio-Tasks/checkio-task-roman-numerals
+
+for latest versions of my solutions, see my checkio solution github repo:
+https://github.com/jmegner/CheckioPuzzles
+'''
+
+
 def checkio(number):
     romanParts = []
     units =  [ 'I', 'X', 'C', 'M']
@@ -24,13 +38,13 @@ def checkio(number):
                 + unit * remainderToNumPostUnits[remainder]
                 + nextUnit * remainderToNumNextUnits[remainder])
 
-    print(romanParts)
     return ''.join(reversed(romanParts))
 
 
 if __name__ == '__main__':
-    #These "asserts" using only for self-checking and not necessary for auto-testing
     assert checkio(6) == 'VI', '6'
     assert checkio(76) == 'LXXVI', '76'
     assert checkio(499) == 'CDXCIX', '499'
     assert checkio(3888) == 'MMMDCCCLXXXVIII', '3888'
+    assert checkio(3999) == 'MMMCMXCIX', '3999'
+
