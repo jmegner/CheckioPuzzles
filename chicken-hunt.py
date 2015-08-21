@@ -67,6 +67,9 @@ class Loc(collections.namedtuple('Loc', ['r', 'c'])):
             newLoc = self + delta
 
             if grid is None or newLoc.inBounds(grid):
+                if newLoc.getVal(grid) == Misc.s_wall:
+                    continue
+
                 isSelf = delta == Loc(0, 0)
                 isOpen = newLoc.getVal(grid) == Misc.s_open
 
@@ -87,6 +90,26 @@ Loc.s_principalDels = collections.OrderedDict([
     (Loc(-1, -1), 'NW'),
     (Loc(+0, +0), ''),
 ])
+
+
+class YardNode(collections.namedtuple(
+    'YardNode',
+    ['yard', 'chickenLoc', 'hobALoc', 'hobBLoc',])
+):
+    pass
+
+class YardExtra(collections.namedtuple(
+    'YardExtra',
+    ['stepNum', 'goodChildNode']
+):
+    pass
+
+
+class HobbitNode(collections.namedtuple(
+    'HobbitNode',
+    ['hobALoc', 'hobBLoc', 'possibleYardNodes']
+):
+    pass
 
 
 g_algoRandom = "random"
@@ -175,6 +198,61 @@ def isNewYard(prevYard, currYard):
     return False
 
 
+def makeYardNode(yard):
+    chickenLoc = findChar(yard, Misc.s_chicken)
+    hobSelfLoc = findChar(yard, Misc.s_hobbitSelf)
+    hobOtherLoc = findChar(yard, Misc.s_hobbitOther)
+
+    hobALoc, hobBLoc = sorted([hobALoc, hobBLoc])
+
+    yardNode = YardNode(yard, chickenLoc, hobALoc, hobBLoc)
+    return yardNode
+
+
+def makeYardGraph(startYard):
+    yardNodeToHobbitNodes = collections.defaultdict(list)
+    yardNodeToExtra = {}
+
+    #TODO: need to branch on hobbit moves, THEN chicken moves
+
+    startNode = makeYardNode(startYard)
+    yardNodeQ = collections.deque([startNode])
+    yardNodeToExtra[startNode] = YardExtra(stepNum=1, parentNode=None)
+
+    while yardNodeQ:
+        yardNode = yardNodeQ.popleft()
+        extra = yardNodeToExtra[yardNode]
+
+        nextChickenLocs = getNextActorLocs(yardNode, yardNode.chickenLoc)
+        nextHobALocs = getNextActorLocs(yardNode, yardNode.hobALoc)
+        nextHobBLocs = getNextActorLocs(yardNode, yardNode.hobBLoc)
+
+        nextHobLocPairs = sorted(set(
+            tuple(sorted((nextHobALoc, nextHobBLoc)))
+            for nextHobALoc, nextHobBLoc
+            in itertools.product(nextHobALocs, nextHobBLocs)
+            if nextHobALoc != nextHobBLoc
+        ))
+
+        for nextHobALoc, nextHobBLoc in nextHobLocPairs:
+            hobbitNode = HobbitNode(nextHobALoc, nextHobBLoc, [])
+
+            for nextChickenLoc in nextChickenLocs:
+                if nextChickenLoc in (nextHobALoc, nextHobBLoc):
+                    nextChickenLoc = None
+
+                possibleYardNode = makeYardNode(
+                    yardNode.yard, nextChickenLoc, nextHobALoc, nextHobBLoc))
+
+                #TODO: gosh, if we already have such a node, then maybe the whole nextHobLocPair should be scrapped?
+
+                hobbitNode.possibleYardNodes.append(possibleYardNode)
+
+                if nextChickenLoc is not None:
+                    yardNodeQ.append(possibleYardNode)
+
+
+'''
 def getPossibleChickenAlgos(prevYard, currYard):
     prevHobSelfLoc = findChar(prevYard, Misc.s_hobbitSelf)
     currHobSelfLoc = findChar(currYard, Misc.s_hobbitSelf)
@@ -198,17 +276,20 @@ def getPossibleChickenAlgos(prevYard, currYard):
         possibleChickenAlgos.add(g_algoHunter)
 
     return possibleChickenAlgos
+'''
 
 
-def getNextChickenLocs(yard, distSelector):
-    chickenLoc = findChar(yard, Misc.s_chicken)
-    hobSelfLoc = findChar(yard, Misc.s_hobbitSelf)
-    hobOtherLoc = findChar(yard, Misc.s_hobbitOther)
+'''
+def getNextChickenLocs(yardNode, distSelector=None):
 
-    potentialNextChickenLocs = chickenLoc.principalNeighbors(yard, True)
+    potentialNextChickenLocs = yardNode.chickenLoc.principalNeighbors(
+        yard, True)
+
+    if distSelector is None:
+        return potentialNextChickenLocs
 
     potentialChickenDists = [
-        min(loc.euclidDist(hobSelfLoc), loc.euclidDist(hobOtherLoc))
+        min(loc.euclidDist(yard.hobALoc), loc.euclidDist(yard.hobBLoc))
         for loc in potentialNextChickenLocs
     ]
 
@@ -220,6 +301,14 @@ def getNextChickenLocs(yard, distSelector):
     ]
 
     return nextChickenLocs
+'''
+
+
+def getNextActorLocs(yardNode, actorLoc)
+    if actorLoc.getVal(yardNode.yard) == Misc.s_chicken:
+        return actorLoc.principalNeighbors(yardNode.yard, True)
+
+    return actorLoc.principalNeighbors(yardNode.yard, False)
 
 
 def findDistsFromLoc(yard, startLoc):
@@ -233,9 +322,6 @@ def findDistsFromLoc(yard, startLoc):
         newlySolvedDist = newlySolvedLoc.getVal(dists)
 
         for neighbor in newlySolvedLoc.principalNeighbors(yard):
-            if neighbor.getVal(yard) == Misc.s_wall:
-                continue
-
             neighborDist = neighbor.getVal(dists)
 
             if neighborDist is None or newlySolvedDist + 1 < neighborDist:
